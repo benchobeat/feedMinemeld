@@ -8,6 +8,7 @@
 .env
 *.env
 
+.netrc
 # Archivos de configuración local
 *config.local.*
 
