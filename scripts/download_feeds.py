@@ -15,7 +15,15 @@ requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 # Configuración
 FEEDS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'feeds')
-FEED_URL = "https://192.168.106.235/feeds/IoC_IP_Output"
+
+# Obtener la URL del feed desde variable de entorno o usar valor por defecto
+FEED_URL = os.environ.get('FEED_URL', 'https://192.168.106.235/feeds/IoC_IP_Output')
+
+# Validar que la URL del feed esté configurada
+if not FEED_URL:
+    print("[ERROR] La URL del feed no está configurada. Por favor, establece la variable de entorno FEED_URL.")
+    sys.exit(1)
+
 FEED_PARAMS = {
     'v': 'csv',
     'f': [
@@ -147,42 +155,97 @@ def run_git_command(command, *args):
         return False
 
 def main():
+    global FEED_URL
+    
     parser = argparse.ArgumentParser(description='Descarga feeds de inteligencia y actualiza el repositorio.')
     parser.add_argument('--no-commit', action='store_true', help='No hacer commit de los cambios')
-    parser.add_argument('--no-push', action='store_true', help='No hacer push de los cambios')
+    parser.add_argument('--no-push', action='store_true', help='No hacer push a GitHub')
+    parser.add_argument('--debug', action='store_true', help='Mostrar información de depuración')
+    parser.add_argument('--feed-url', type=str, help='URL del feed (sobreescribe la variable de entorno FEED_URL)')
     
     args = parser.parse_args()
     
-    # Asegurar que el directorio de feeds existe
-    ensure_feeds_directory()
-    
-    # Descargar el feed
-    print("Descargando feed...")
-    downloaded_file = download_feed()
-    
-    if not downloaded_file:
-        print("No se pudo descargar el feed. Saliendo.", file=sys.stderr)
-        sys.exit(1)
-    
-    if not args.no_commit:
-        # Hacer commit de los cambios
-        commit_message = f"Actualización automática de feed: {os.path.basename(downloaded_file)}"
-        print("\nHaciendo commit de los cambios...")
-        if not run_git_command('add'):
+    try:
+        # Usar la URL del argumento de línea de comandos si se proporciona
+        if args.feed_url:
+            global FEED_URL
+            FEED_URL = args.feed_url
+            print(f"[INFO] Usando URL del feed proporcionada por línea de comandos")
+        else:
+            print(f"[INFO] Usando URL del feed de la variable de entorno FEED_URL")
+            
+        print(f"[DEBUG] URL del feed: {FEED_URL}")
+        
+        # Asegurar que el directorio de feeds existe
+        ensure_feeds_directory()
+        
+        # Descargar el feed
+        print("\n" + "="*50)
+        print("INICIANDO PROCESO DE ACTUALIZACIÓN DE FEEDS")
+        print("="*50)
+        
+        downloaded_file = download_feed()
+        
+        if not downloaded_file:
+            print("\n[ERROR] No se pudo descargar el feed. Abortando proceso.")
             sys.exit(1)
             
-        if not run_git_command('commit', commit_message):
-            print("No se pudo hacer commit de los cambios.", file=sys.stderr)
-            sys.exit(1)
+        print("\n[ÉXITO] Feed descargado correctamente")
+        print(f"- Archivo: {downloaded_file}")
         
-        if not args.no_push:
-            # Hacer push de los cambios
-            print("\nSubiendo cambios a GitHub...")
-            if not run_git_command('push'):
-                print("No se pudo subir los cambios a GitHub.", file=sys.stderr)
+        # Verificar si hay cambios para hacer commit
+        if not args.no_commit:
+            # Obtener el nombre del archivo para el mensaje de commit
+            filename = os.path.basename(downloaded_file)
+            commit_message = f"feat: actualización automática de feed {filename}"
+            
+            print("\n" + "-"*50)
+            print("PROCESO DE COMMIT")
+            print("-"*50)
+            
+            # Agregar archivos al staging
+            print("\n[INFO] Agregando archivos al área de staging...")
+            if not run_git_command('add'):
+                print("[ERROR] No se pudieron agregar los archivos al staging")
                 sys.exit(1)
-    
-    print("\nProceso completado exitosamente.")
+                
+            # Verificar si hay cambios para hacer commit
+            check_changes = subprocess.run(
+                ['git', 'diff-index', '--quiet', 'HEAD', '--'],
+                cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
+            
+            if check_changes.returncode != 0:
+                # Hacer commit de los cambios
+                print("[INFO] Haciendo commit de los cambios...")
+                if run_git_command('commit', commit_message):
+                    print(f"[ÉXITO] Commit realizado: {commit_message}")
+                    
+                    # Hacer push si está habilitado
+                    if not args.no_push:
+                        print("\n" + "-"*50)
+                        print("SUBIDA DE CAMBIOS A GITHUB")
+                        print("-"*50)
+                        print("\n[INFO] Subiendo cambios a GitHub...")
+                        if run_git_command('push'):
+                            print("[ÉXITO] Cambios subidos exitosamente a GitHub")
+                        else:
+                            print("[ADVERTENCIA] No se pudieron subir los cambios a GitHub")
+                else:
+                    print("[ERROR] No se pudo hacer commit de los cambios")
+            else:
+                print("[INFO] No hay cambios para hacer commit")
+        
+        print("\n" + "="*50)
+        print("PROCESO COMPLETADO EXITOSAMENTE")
+        print("="*50 + "\n")
+        
+    except Exception as e:
+        print(f"\n[ERROR CRÍTICO] {str(e)}", file=sys.stderr)
+        if args.debug:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
