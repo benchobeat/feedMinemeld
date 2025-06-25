@@ -1,0 +1,40 @@
+# Archivos temporales
+*.tmp
+*~
+*.swp
+*.swo
+
+# Archivos de entorno
+.env
+*.env
+
+# Archivos de configuración local
+*config.local.*
+
+# Logs
+*.log
+
+# Directorios
+__pycache__/
+venv/
+.venv/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de IDE
+.idea/
+.vscode/
+*.sublime-workspace
+
+# Archivos de respaldo
+*.bak
+*.backup
+
+# Archivos de datos temporales
+*.dat
+*.data
+
+# Archivos de caché
+.cache/
