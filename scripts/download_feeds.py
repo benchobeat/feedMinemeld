@@ -39,25 +39,80 @@ def ensure_feeds_directory():
 def download_feed():
     """Descarga el feed desde la URL especificada."""
     try:
-        # Construir parámetros de la URL
-        params = {}
-        for i, value in enumerate(FEED_PARAMS['f']):
-            params[f'f[{i}]'] = value
-        params['v'] = FEED_PARAMS['v']
+        print("\n" + "="*50)
+        print("Iniciando descarga del feed...")
+        print(f"Hora: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
-        # Realizar la petición
-        response = requests.get(FEED_URL, params=params, verify=False)
+        # Construir parámetros de la URL manualmente para mantener el formato correcto
+        params = 'v=csv&f=indicator|ioc&f=iocType&f=mail|response&f=mail&f=origin&f=requester|Requester&f=stix_title|info&f=confidence&f=risk'
+        full_url = f"{FEED_URL}?{params}"
+        
+        print("\n[DEBUG] Configuración de la solicitud:")
+        print(f"- URL base: {FEED_URL}")
+        print(f"- Parámetros: {params}")
+        print(f"- URL completa: {full_url}")
+        
+        # Configurar headers para indicar que esperamos un CSV
+        headers = {
+            'Accept': 'text/csv',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        print("\n[DEBUG] Headers de la solicitud:")
+        for key, value in headers.items():
+            print(f"- {key}: {value}")
+        
+        print("\n[INFO] Realizando petición HTTP...")
+        response = requests.get(full_url, headers=headers, verify=False)
+        
+        print("\n[DEBUG] Información de la respuesta:")
+        print(f"- Código de estado: {response.status_code}")
+        print(f"- Content-Type: {response.headers.get('Content-Type', 'No especificado')}")
+        print(f"- Tamaño de la respuesta: {len(response.content)} bytes")
+        print(f"- Primeros 200 caracteres de la respuesta: {response.text[:200]}")
+        
+        # Verificar código de estado
         response.raise_for_status()
+        
+        # Verificar que el contenido sea efectivamente un CSV
+        content_type = response.headers.get('Content-Type', '').lower()
+        is_csv = 'text/csv' in content_type or 'application/csv' in content_type
+        
+        print("\n[DEBUG] Análisis del contenido:")
+        print(f"- ¿Es CSV? {'Sí' if is_csv else 'No'}")
+        if not is_csv:
+            print("  - Advertencia: El Content-Type no indica que sea un archivo CSV")
+            print(f"  - Content-Type recibido: {content_type}")
+        
+        # Contar líneas del CSV
+        line_count = len(response.text.splitlines())
+        print(f"- Número de líneas en el CSV: {line_count}")
+        
+        if line_count > 0:
+            # Mostrar encabezados
+            headers = response.text.splitlines()[0].split(',')
+            print(f"- Columnas detectadas ({len(headers)}): {', '.join(headers[:5])}{'...' if len(headers) > 5 else ''}")
         
         # Generar nombre de archivo con fecha y hora
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = os.path.join(FEEDS_DIR, f'feed_{timestamp}.csv')
         
+        print(f"\n[INFO] Guardando archivo en: {filename}")
+        
+        # Crear directorio si no existe
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        
         # Guardar el archivo
-        with open(filename, 'w', encoding='utf-8') as f:
+        with open(filename, 'w', encoding='utf-8-sig') as f:  # utf-8-sig para manejar BOM si es necesario
             f.write(response.text)
             
-        print(f"Feed descargado exitosamente: {filename}")
+        # Verificar que el archivo se haya guardado correctamente
+        file_size = os.path.getsize(filename)
+        print(f"[ÉXITO] Archivo guardado correctamente")
+        print(f"- Tamaño del archivo: {file_size} bytes")
+        print(f"- Líneas escritas: {line_count}")
+        print("="*50 + "\n")
+        
         return filename
         
     except requests.exceptions.RequestException as e:
